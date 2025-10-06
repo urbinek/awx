@@ -54,10 +54,13 @@
             timeout: 300
           delegate_to: localhost
 
-        - name: Weryfikacja wersji po aktualizacji
+        - name: Weryfikacja wersji po aktualizacji (z ponowieniami)
           community.routeros.command:
             commands: /system/resource/print
           register: final_version_check
+          until: final_version_check.failed == false
+          retries: 10
+          delay: 15
           changed_when: false
 
         - name: Wyświetlenie finalnej wersji RouterOS
