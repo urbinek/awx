@@ -4,9 +4,9 @@
   gather_facts: false
 
   vars:
-    ansible_connection: ansible.netcommon.network_cli
+    # ansible_connection: ansible.netcommon.network_cli
     ansible_user: "{{ mikrotik_user }}"
-    ansible_network_os: community.routeros.routeros
+    # ansible_network_os: community.routeros.routeros
 
   tasks:
     - name: Ustawienie stabilnej gałęzi aktualizacji (stable)
@@ -22,7 +22,9 @@
 
     - name: Wyświetlenie informacji o dostępnej wersji (jeśli znaleziono)
       ansible.builtin.debug:
-        msg: "Dostępna nowa wersja: {{ update_check.stdout_lines[0]['latest-version'] }}. Obecna wersja: {{ update_check.stdout_lines[0]['current-version'] }}"
+        msg: >-
+          Dostępna nowa wersja: {{ (update_check.stdout | join('')) | regex_search('latest-version:\\s+(\\S+)', '\\1') | first }}
+          Obecna wersja: {{ (update_check.stdout | join('')) | regex_search('current-version:\\s+(\\S+)', '\\1') | first }}
       when: update_check.changed
 
     - name: Proces aktualizacji i restartu urządzenia
@@ -59,6 +61,6 @@
 
         - name: Wyświetlenie finalnej wersji RouterOS
           ansible.builtin.debug:
-            msg: "SUKCES: Urządzenie {{ inventory_hostname }} zaktualizowane do wersji: {{ final_version_check.stdout_lines[0].version }}"
+            msg: "SUKCES: Urządzenie {{ inventory_hostname }} zaktualizowane do wersji: {{ (final_version_check.stdout | join('')) | regex_search('version:\\s+(\\S+)', '\\1') | first }}"
 
       when: update_check.changed
