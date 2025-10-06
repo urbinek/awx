@@ -6,7 +6,7 @@
   vars:
     # ansible_connection: ansible.netcommon.network_cli
     ansible_user: "{{ mikrotik_user }}"
-    # ansible_network_os: community.routeros.routeros
+    ansible_network_os: community.routeros.routeros
 
   tasks:
     - name: Ustawienie stabilnej gałęzi aktualizacji (stable)
