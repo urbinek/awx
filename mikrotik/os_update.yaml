@@ -1,5 +1,5 @@
 ---
-- name: Aktualizacja urządzeń MikroTik RouterOS
+- name: Aktualizacja urządzeń MikroTik RouterOS (Wersja uproszczona)
   hosts: mikrotik_devices
   gather_facts: false
 
@@ -14,31 +14,25 @@
         commands: /system/package/update/set channel=stable
       changed_when: false
 
-    - name: Sprawdzenie dostępnych aktualizacji RouterOS
+    - name: Sprawdzenie, czy jest dostępna nowa wersja RouterOS
       community.routeros.command:
         commands: /system/package/update/check-for-updates
       register: update_check
       changed_when: "'New version is available' in (update_check.stdout | join(''))"
-      notify: Reboot device if needed
 
-    - name: Wyświetlenie informacji o dostępnej wersji
+    - name: Wyświetlenie informacji o dostępnej wersji (jeśli znaleziono)
       ansible.builtin.debug:
         msg: "Dostępna nowa wersja: {{ update_check.stdout_lines[0]['latest-version'] }}. Obecna wersja: {{ update_check.stdout_lines[0]['current-version'] }}"
       when: update_check.changed
 
-    - name: Pobranie pakietu aktualizacyjnego (jeśli jest dostępny)
-      community.routeros.command:
-        commands: /system/package/update/download
-      when: update_check.changed
-      register: download_status
-      changed_when: "'Downloaded' in (download_status.stdout | join(''))"
-
-  # ---------------------------------------------------------------------------
-  # HANDLERS - Zadania wywoływane przez "notify"
-  # ---------------------------------------------------------------------------
-  handlers:
-    - name: Reboot device if needed
+    - name: Proces aktualizacji i restartu urządzenia
       block:
+        - name: Pobranie pakietu aktualizacyjnego
+          community.routeros.command:
+            commands: /system/package/update/download
+          register: download_status
+          changed_when: "'Downloaded' in (download_status.stdout | join(''))"
+
         - name: Restart urządzenia w celu instalacji aktualizacji
           community.routeros.command:
             commands: /system/reboot
@@ -65,4 +59,6 @@
 
         - name: Wyświetlenie finalnej wersji RouterOS
           ansible.builtin.debug:
-            msg: "Urządzenie {{ inventory_hostname }} zaktualizowane do wersji: {{ final_version_check.stdout_lines[0].version }}"
+            msg: "SUKCES: Urządzenie {{ inventory_hostname }} zaktualizowane do wersji: {{ final_version_check.stdout_lines[0].version }}"
+
+      when: update_check.changed
