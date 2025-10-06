@@ -9,24 +9,24 @@
     ansible_network_os: community.routeros.routeros
 
   tasks:
-    - name: Ustawienie stabilnej gałęzi aktualizacji
+    - name: Ustawienie stabilnej gałęzi aktualizacji (stable)
       community.routeros.command:
         commands: /system/package/update/set channel=stable
       changed_when: false
 
     - name: Sprawdzenie dostępnych aktualizacji RouterOS
       community.routeros.command:
-        commands: /system/package/update/check-for-updates without-paging
+        commands: /system/package/update/check-for-updates
       register: update_check
       changed_when: "'New version is available' in (update_check.stdout | join(''))"
       notify: Reboot device if needed
 
-    - name: Dostępne wersje
+    - name: Wyświetlenie informacji o dostępnej wersji
       ansible.builtin.debug:
         msg: "Dostępna nowa wersja: {{ update_check.stdout_lines[0]['latest-version'] }}. Obecna wersja: {{ update_check.stdout_lines[0]['current-version'] }}"
       when: update_check.changed
 
-    - name: Pobranie pakietu aktualizacyjnego
+    - name: Pobranie pakietu aktualizacyjnego (jeśli jest dostępny)
       community.routeros.command:
         commands: /system/package/update/download
       when: update_check.changed
@@ -39,7 +39,7 @@
   handlers:
     - name: Reboot device if needed
       block:
-        - name: Restart urządzenia...
+        - name: Restart urządzenia w celu instalacji aktualizacji
           community.routeros.command:
             commands: /system/reboot
           async: 45
@@ -56,7 +56,7 @@
 
         - name: Weryfikacja wersji po aktualizacji
           community.routeros.command:
-            commands: /system resource print without-paging
+            commands: /system/resource/print
           register: final_version_check
           changed_when: false
 
