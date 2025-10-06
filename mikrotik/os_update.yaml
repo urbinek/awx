@@ -13,6 +13,16 @@
 
 
   tasks:
+    - name: Pobranie obecnej wersji RouterOS
+      community.routeros.command:
+        commands: /system/package/update/print
+      register: current_version_check
+      changed_when: current_version_check.failed == false
+
+    - name: Wyświetlenie obecnej wersji RouterOS
+      ansible.builtin.debug:
+        msg: current_version_check.stdout
+
     - name: Ustawienie stabilnej gałęzi aktualizacji (stable)
       community.routeros.command:
         commands: /system/package/update/set channel=stable
