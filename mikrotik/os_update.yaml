@@ -56,7 +56,7 @@
 
         - name: Weryfikacja wersji po aktualizacji
           community.routeros.command:
-            commands: /system/resource/print
+            commands: /system resource print without-paging
           register: final_version_check
           changed_when: false
 
