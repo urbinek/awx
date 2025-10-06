@@ -15,7 +15,7 @@
   tasks:
     - name: Pobranie obecnej wersji RouterOS
       community.routeros.command:
-        commands: /system/package/update/print
+        commands: /system package update print
       register: current_version_check
       changed_when: current_version_check.failed == false
 
