@@ -9,19 +9,24 @@
     ansible_network_os: community.routeros.routeros
 
   tasks:
-    - name: 1. Sprawdzenie dostępnych aktualizacji RouterOS
+    - name: Ustawienie stabilnej gałęzi aktualizacji
       community.routeros.command:
-        commands: /system/package/update/check-for-updates
+        commands: /system/package/update/set channel=stable
+      changed_when: false
+
+    - name: Sprawdzenie dostępnych aktualizacji RouterOS
+      community.routeros.command:
+        commands: /system/package/update/check-for-updates without-paging
       register: update_check
       changed_when: "'New version is available' in (update_check.stdout | join(''))"
       notify: Reboot device if needed
 
-    - name: 2. Wyświetlenie informacji o dostępnej wersji
+    - name: Dostępne wersje
       ansible.builtin.debug:
         msg: "Dostępna nowa wersja: {{ update_check.stdout_lines[0]['latest-version'] }}. Obecna wersja: {{ update_check.stdout_lines[0]['current-version'] }}"
       when: update_check.changed
 
-    - name: 3. Pobranie pakietu aktualizacyjnego (jeśli jest dostępny)
+    - name: Pobranie pakietu aktualizacyjnego
       community.routeros.command:
         commands: /system/package/update/download
       when: update_check.changed
@@ -34,13 +39,13 @@
   handlers:
     - name: Reboot device if needed
       block:
-        - name: 4. Restart urządzenia w celu instalacji aktualizacji
+        - name: Restart urządzenia...
           community.routeros.command:
             commands: /system/reboot
           async: 45
           poll: 0
 
-        - name: 5. Oczekiwanie na ponowne uruchomienie urządzenia (port SSH)
+        - name: Oczekiwanie na ponowne uruchomienie urządzenia (port SSH)
           ansible.builtin.wait_for:
             host: "{{ inventory_hostname }}"
             port: 22
@@ -49,12 +54,12 @@
             timeout: 300
           delegate_to: localhost
 
-        - name: 6. Weryfikacja wersji po aktualizacji
+        - name: Weryfikacja wersji po aktualizacji
           community.routeros.command:
             commands: /system/resource/print
           register: final_version_check
           changed_when: false
 
-        - name: 7. Wyświetlenie finalnej wersji RouterOS
+        - name: Wyświetlenie finalnej wersji RouterOS
           ansible.builtin.debug:
             msg: "Urządzenie {{ inventory_hostname }} zaktualizowane do wersji: {{ final_version_check.stdout_lines[0].version }}"
