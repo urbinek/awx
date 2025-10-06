@@ -1,0 +1,75 @@
+---
+- name: Aktualizacja urządzeń MikroTik RouterOS przy użyciu klucza SSH
+  hosts: mikrotik_devices
+  gather_facts: false
+
+  # ---------------------------------------------------------------------------
+  # ZMIENNE POŁĄCZENIA SSH
+  # Te ustawienia informują Ansible, aby używał połączenia SSH.
+  # Hasło jest celowo pominięte - AWX poda klucz SSH z poświadczenia.
+  # ---------------------------------------------------------------------------
+  vars:
+    # ZMIANA: Używamy standardowego połączenia sieciowego przez SSH
+    ansible_connection: ansible.netcommon.network_cli
+
+    # Użytkownik, dla którego wgrany jest klucz publiczny na MikroTiku
+    ansible_user: "{{ mikrotik_user }}"
+
+    # System operacyjny, aby Ansible wiedział jak interpretować komendy
+    ansible_network_os: community.routeros.routeros
+
+  # ---------------------------------------------------------------------------
+  # ZADANIA (TASKS) - Kroki pozostają takie same
+  # ---------------------------------------------------------------------------
+  tasks:
+    - name: 1. Sprawdzenie dostępnych aktualizacji RouterOS
+      community.routeros.command:
+        commands: /system/package/update/check-for-updates
+      register: update_check
+      changed_when: "'status: New version is available' in update_check.stdout[0]"
+      notify: Reboot device if needed
+
+    - name: 2. Wyświetlenie informacji o dostępnej wersji
+      ansible.builtin.debug:
+        msg: "Dostępna nowa wersja: {{ update_check.stdout_lines[0]['latest-version'] }}. Obecna wersja: {{ update_check.stdout_lines[0]['current-version'] }}"
+      when: update_check.changed
+
+    - name: 3. Pobranie pakietu aktualizacyjnego (jeśli jest dostępny)
+      community.routeros.command:
+        commands: /system/package/update/download
+      when: update_check.changed
+      register: download_status
+      changed_when: download_status.stdout is defined and 'status: Downloaded' in download_status.stdout
+
+  # ---------------------------------------------------------------------------
+  # HANDLERS - Zadania wywoływane przez "notify"
+  # ---------------------------------------------------------------------------
+  handlers:
+    - name: Reboot device if needed
+      listen: "Reboot device if needed"
+      block:
+        - name: 4. Restart urządzenia w celu instalacji aktualizacji
+          community.routeros.command:
+            commands: /system/reboot
+          async: 45
+          poll: 0
+
+        - name: 5. Oczekiwanie na ponowne uruchomienie urządzenia (port SSH)
+          ansible.builtin.wait_for:
+            host: "{{ inventory_hostname }}"
+            # ZMIANA: Sprawdzamy dostępność portu SSH (domyślnie 22)
+            port: 22
+            state: started
+            delay: 30  # Czas w sekundach przed pierwszym sprawdzeniem
+            timeout: 300 # Maksymalny czas oczekiwania
+          delegate_to: localhost
+
+        - name: 6. Weryfikacja wersji po aktualizacji
+          community.routeros.command:
+            commands: /system/resource/print
+          register: final_version_check
+          changed_when: false
+
+        - name: 7. Wyświetlenie finalnej wersji RouterOS
+          ansible.builtin.debug:
+            msg: "Urządzenie {{ inventory_hostname }} zaktualizowane do wersji: {{ final_version_check.stdout_lines[0].version }}"
