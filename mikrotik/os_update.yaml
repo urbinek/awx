@@ -6,8 +6,9 @@
   vars:
     # ansible_connection: ansible.netcommon.network_cli
     # ansible_network_os: community.routeros.routeros
-    ansible_user: "{{ mikrotik_user }}"
+    ansible_user: "{{ mikrotik_user }}+cet512w"
     ansible_connection: network_cli
+    ansible_network_cli_ssh_type: libssh
     ansible_network_os: routeros
 
 
