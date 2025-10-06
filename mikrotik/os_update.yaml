@@ -28,10 +28,11 @@
       register: download_status
       changed_when: "'Downloaded' in (download_status.stdout | join(''))"
 
-
+  # ---------------------------------------------------------------------------
+  # HANDLERS - Zadania wywoływane przez "notify"
+  # ---------------------------------------------------------------------------
   handlers:
     - name: Reboot device if needed
-      listen: "Reboot device if needed"
       block:
         - name: 4. Restart urządzenia w celu instalacji aktualizacji
           community.routeros.command:
