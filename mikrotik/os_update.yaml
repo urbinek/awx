@@ -8,7 +8,10 @@
     # ansible_network_os: community.routeros.routeros
     ansible_user: "{{ mikrotik_user }}+cet512w"
     ansible_connection: network_cli
-    # ansible_network_cli_ssh_type: libssh
+    ansible_network_cli_ssh_type: paramiko
+    ansible_network_cli_retries: 2
+    ansible_buffer_read_timeout: 1
+    ansible_command_timeout: 60
     ansible_network_os: routeros
 
 
