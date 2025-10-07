@@ -24,7 +24,7 @@
 
     - name: Wyświetlenie obecnej wersji
       ansible.builtin.debug:
-        msg: "{{ current_version_check.stdout) }}"
+        msg: "{{ current_version_check.stdout }}"
 
     - name: Ustawienie stabilnej gałęzi aktualizacji (stable)
       community.routeros.command:
