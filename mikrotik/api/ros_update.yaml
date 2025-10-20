@@ -1,0 +1,99 @@
+---
+- name: Aktualizacja urządzeń MikroTik RouterOS (przez REST API)
+  hosts: mikrotik_devices
+  gather_facts: false
+
+  vars:
+    # --- Konfiguracja połączenia dla REST API ---
+    ansible_connection: httpapi
+    ansible_httpapi_plugin: community.routeros.routeros_rest
+    ansible_user: "{{ mikrotik_user }}+cet512w"
+    # 'ansible_password' zostanie dostarczone przez AWX Credential
+
+    # Używamy SSL (HTTPS) - zalecane
+    ansible_httpapi_use_ssl: yes
+    # Domyślnie MikroTik używa certyfikatów self-signed,
+    # więc musimy wyłączyć ich walidację.
+    ansible_httpapi_validate_certs: no
+
+    # Zwiększenie timeoutu na wypadek wolnej odpowiedzi API
+    ansible_command_timeout: 60
+
+
+  tasks:
+    - name: Pobranie informacji o wersji (sprawdzenie połączenia)
+      community.routeros.rest:
+        path: /system/resource
+        method: get
+      register: current_version_check
+      changed_when: false
+
+    - name: Wyświetlenie obecnej wersji
+      ansible.builtin.debug:
+        msg: "Obecna wersja: {{ current_version_check.result.version }}"
+
+    - name: Ustawienie stabilnej gałęzi aktualizacji (stable)
+      community.routeros.rest:
+        path: /system/package/update
+        method: patch
+        content:
+          channel: "stable"
+      changed_when: false
+
+    - name: Sprawdzenie, czy jest dostępna nowa wersja RouterOS
+      community.routeros.rest:
+        path: /system/package/update/check-for-updates
+        method: post  # Akcje (jak 'check-for-updates') to zwykle POST
+      register: update_check
+      # Odpowiedź z REST API jest w formacie JSON
+      changed_when: update_check.result.status == "New version is available"
+
+    - name: Wyświetlenie informacji o dostępnej wersji (jeśli znaleziono)
+      ansible.builtin.debug:
+        msg: >-
+          Dostępna nowa wersja: {{ update_check.result['latest-version'] }}
+          Obecna wersja: {{ update_check.result['current-version'] }}
+      when: update_check.changed
+
+    - name: Proces aktualizacji i restartu urządzenia
+      block:
+        - name: Pobranie pakietu aktualizacyjnego
+          community.routeros.rest:
+            path: /system/package/update/download
+            method: post
+          register: download_status
+          changed_when: "'Downloaded' in download_status.result.status"
+          async: 120 # Pobieranie może chwilę zająć
+          poll: 5
+
+        - name: Restart urządzenia w celu instalacji aktualizacji
+          community.routeros.rest:
+            path: /system/reboot
+            method: post
+          async: 45
+          poll: 0
+
+        - name: Oczekiwanie na ponowne uruchomienie urządzenia (port HTTPS)
+          ansible.builtin.wait_for:
+            host: "{{ inventory_hostname }}"
+            port: 443  # Czekamy na port API (www-ssl)
+            state: started
+            delay: 30
+            timeout: 300
+          delegate_to: localhost
+
+        - name: Weryfikacja wersji po aktualizacji (z ponowieniami)
+          community.routeros.rest:
+            path: /system/resource
+            method: get
+          register: final_version_check
+          until: final_version_check.failed == false
+          retries: 10
+          delay: 15
+          changed_when: false
+
+        - name: Wyświetlenie finalnej wersji RouterOS
+          ansible.builtin.debug:
+            msg: "SUKCES: Urządzenie {{ inventory_hostname }} zaktualizowane do wersji: {{ final_version_check.result.version }}"
+
+      when: update_check.changed

@@ -1,5 +1,5 @@
 ---
-- name: Aktualizacja urządzeń MikroTik RouterOS (Wersja uproszczona)
+- name: Aktualizacja urządzeń MikroTik RouterOS
   hosts: mikrotik_devices
   gather_facts: false
 
