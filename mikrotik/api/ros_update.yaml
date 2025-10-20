@@ -3,9 +3,12 @@
   hosts: mikrotik_devices
   gather_facts: false
 
+  # Ustawienie połączenia na poziomie Playbooka (zgodnie z dokumentacją)
+  connection: httpapi
+
   vars:
-    # --- Konfiguracja połączenia dla REST API (TO JEST POPRAWNE) ---
-    ansible_connection: httpapi
+    # --- Konfiguracja połączenia dla REST API ---
+    # Wtyczka jest teraz jedyną rzeczą związaną z httpapi w vars
     ansible_httpapi_plugin: community.routeros.routeros_rest
     ansible_user: "{{ mikrotik_user }}+cet512w"
     # 'ansible_password' zostanie dostarczone przez AWX Credential
@@ -23,7 +26,6 @@
 
     - name: Wyświetlenie obecnej wersji
       ansible.builtin.debug:
-        # Moduł .api zwraca wynik jako listę, bierzemy pierwszy element [0]
         msg: "Obecna wersja: {{ current_version_check.result[0].version }}"
 
     - name: Ustawienie stabilnej gałęzi aktualizacji (stable)
