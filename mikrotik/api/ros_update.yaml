@@ -2,6 +2,7 @@
 - name: Aktualizacja urządzeń MikroTik RouterOS (przez REST API v7)
   hosts: mikrotik_devices
   gather_facts: false
+  connection: local
 
   module_defaults:
     community.routeros.api:
