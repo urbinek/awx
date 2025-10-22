@@ -5,16 +5,13 @@
 
   module_defaults:
     community.routeros.api:
-      hostname: "{{ inventory_hostname }}"
       username: "{{ mikrotik_user }}+cet512w"
       password: "{{ mikrotik_password }}"
 
   tasks:
     - name: Get "ip address print"
       community.routeros.api:
-        hostname: "{{ hostname }}"
-        password: "{{ password }}"
-        username: "{{ username }}"
+        hostname: "{{ inventory_hostname }}"
         path: "/ip/address"
         # The following options configure TLS/SSL.
         # Depending on your setup, these options need different values:
