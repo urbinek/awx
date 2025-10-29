@@ -1,80 +1,58 @@
-- name: Aktualizacja urządzeń MikroTik RouterOS (przez REST API v7)
-  hosts: mikrotik_devices
+---
+- name: Aktualizacja MikroTik RouterOS przez API
+  hosts: all
   gather_facts: false
 
-  connection: httpapi
-
   vars:
-    ansible_connection: ansible.netcommon.network_cli
-    ansible_network_os: community.network.routeros
-
-    ansible_user: "{{ mikrotik_user }}+cet512w"
-    ansible_password: "{{ mikrotik_password }}"
+    mikrotik_api_auth_header: "Basic {{ mikrotik_user + ':' + mikrotik_password) | b64encode }}"
 
   tasks:
-    - name: Enable vlan filtering on bridge
-      community.network.routeros_command:
-        commands: /system/routerboard/print
-      register: results
+    - name: Sprawdzanie dostępności aktualizacji RouterOS
+      ansible.builtin.uri:
+        url: "https://{{ inventory_hostname }}/rest/system/package/update/check-for-updates"
+        method: POST
+        headers:
+          Content-Type: 'application/json'
+          Authorization: "{{ mikrotik_api_auth_header }}"
+        body:
+          without-paging: ""
+        body_format: json
+        validate_certs: false 
+      register: update_check_result
+      changed_when: false # 
 
-    - debug:
-        var: results
+    - name: Wyświetl wynik sprawdzania aktualizacji
+      ansible.builtin.debug:
+        var: update_check_result.json
 
-  # connection: httpapi
+    # --- ZADANIE 2: Pobranie i instalacja aktualizacji ---
+    # To zadanie inicjuje proces pobierania i instalacji nowej wersji RouterOS.
+    - name: Pobierz i zainstaluj aktualizacje
+      ansible.builtin.uri:
+        url: "https://{{ inventory_hostname }}/rest/system/package/update/download"
+        method: POST
+        headers:
+          Content-Type: 'application/json'
+          Authorization: "{{ mikrotik_api_auth_header }}"
+        validate_certs: false
+      register: install_result
+      # Warunek: uruchom to zadanie tylko, jeśli poprzednie zadanie znalazło nową wersję.
+      # Klucz 'version' zazwyczaj pojawia się w odpowiedzi, gdy jest dostępna aktualizacja.
+      #when: update_check_result.json and 'version' in (update_check_result.json | first | default({}))
 
-  # vars:
-  #   ansible_httpapi_plugin: community.routeros.routeros_rest
-  #   ansible_user: "{{ mikrotik_user }}+cet512w"
-  #   ansible_password: "{{ mikrotik_password }}"
+    - name: Wyświetl wynik instalacji
+      ansible.builtin.debug:
+        var: install_result.json
+      when: install_result.changed
 
-  #   ansible_httpapi_use_ssl: yes
-  #   ansible_httpapi_validate_certs: no
-  #   ansible_command_timeout: 60
-
-  # tasks:
-  #   - name: Pobranie informacji o wersji (sprawdzenie połączenia)
-  #     community.routeros.api:
-  #       path: /system/resource
-  #     register: current_version_check
-  #     changed_when: false
-
-  #   - name: Wyświetlenie obecnej wersji
-  #     ansible.builtin.debug:
-  #       msg: "Obecna wersja: {{ current_version_check.result[0].version }}"
-
-  #   - name: Sprawdzenie, czy jest dostępna nowa wersja RouterOS
-  #     community.routeros.api:
-  #       path: /system/package/update/check-for-updates
-  #     register: update_check
-  #     changed_when: update_check.result[0].status == "New version is available"
-
-
-
-
-  # tasks:
-  #   - name: Pobranie informacji o wersji (sprawdzenie połączenia)
-  #     # Używamy modułu httpapi_command zamiast community.routeros.api
-  #     ansible.netcommon.httpapi_command:
-  #       # Ścieżkę podajemy w parametrze 'command'
-  #       command: /system/resource
-  #     register: current_version_check
-  #     changed_when: false
-
-  #   - name: Wyświetlenie obecnej wersji
-  #     ansible.builtin.debug:
-  #       # Wynik JSON jest teraz w kluczu '.json' (a nie '.result')
-  #       # Ścieżka REST /system/resource zwraca obiekt, a nie listę
-  #       msg: "Obecna wersja: {{ current_version_check.json.version }}"
-
-  #   - name: Sprawdzenie, czy jest dostępna nowa wersja RouterOS
-  #     ansible.netcommon.httpapi_command:
-  #       command: /system/package/update/check-for-updates
-  #       # Ta operacja wymaga metody POST
-  #       method: post
-  #     register: update_check
-  #     # Wynik jest w .json, a nie .result[0]
-  #     changed_when: update_check.json.status == "New version is available"
-
-  #   - name: Wyświetlenie statusu aktualizacji
-  #     ansible.builtin.debug:
-  #       msg: "Status aktualizacji: {{ update_check.json.status }}"
+    # # --- ZADANIE 3: Restart urządzenia (opcjonalnie, ale zalecane) ---
+    # # Po aktualizacji RouterOS wymagany jest restart.
+    # - name: 3. Zrestartuj urządzenie, aby zakończyć aktualizację
+    #   ansible.builtin.uri:
+    #     url: "https://{{ inventory_hostname }}/rest/system/reboot"
+    #     method: POST
+    #     headers:
+    #       Content-Type: 'application/json'
+    #       Authorization: "{{ mikrotik_api_auth_header }}"
+    #     validate_certs: false
+    #   when: install_result.changed # Uruchom tylko, jeśli instalacja się odbyła
