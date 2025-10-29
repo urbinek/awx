@@ -1,6 +1,7 @@
 ---
 - name: Aktualizacja MikroTik RouterOS przez API
   hosts: all
+  connection: local
   gather_facts: false
 
   vars:
