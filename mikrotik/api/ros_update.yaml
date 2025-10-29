@@ -11,7 +11,7 @@
   tasks:
     - name: Ustawienie kanału aktualizacji na '{{ mikrotik_update_chanel }}'
       ansible.builtin.uri:
-        url: "https://{{ inventory_hostname }}/rest/system/package/update"
+        url: "https://{{ inventory_hostname }}/rest/system/package/update/set"
         method: POST
         headers:
           ContentPOST-Type: 'application/json'
