@@ -56,7 +56,7 @@
       changed_when: false # 
 
     - debug:
-        var: getsStatus.json
+        var: get_status.json
 
     # --- ZADANIE 2: Pobranie i instalacja aktualizacji ---
     # To zadanie inicjuje proces pobierania i instalacji nowej wersji RouterOS.
