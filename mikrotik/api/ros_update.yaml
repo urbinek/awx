@@ -36,8 +36,8 @@
         body:
           without-paging: ""
         body_format: json
-        body_format: check_for_updates
         validate_certs: false 
+      register: check_for_updates
       changed_when: false 
 
     - debug:
