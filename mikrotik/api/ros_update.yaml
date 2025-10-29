@@ -5,7 +5,7 @@
   gather_facts: false
 
   vars:
-    mikrotik_api_auth_header: "Basic {{ mikrotik_user + ':' + mikrotik_password | b64encode }}"
+    mikrotik_api_auth_header: "Basic {{ ( mikrotik_user + ':' + mikrotik_password ) | b64encode }}"
 
   tasks:
     - name: Sprawdzanie dostępności aktualizacji RouterOS
