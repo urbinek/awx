@@ -6,9 +6,27 @@
 
   vars:
     mikrotik_api_auth_header: "Basic {{ ( mikrotik_user + ':' + mikrotik_password ) | b64encode }}"
+    mikrotik_update_chanel: stable # development|long-term|stable|testing
 
   tasks:
-    - name: Sprawdzanie dostępności aktualizacji RouterOS
+    - name: Ustawienie kanału aktualizacji na '{{ mikrotik_update_chanel }}'
+      ansible.builtin.uri:
+        url: "https://{{ inventory_hostname }}/rest/system/package/update"
+        method: POST
+        headers:
+          ContentPOST-Type: 'application/json'
+          Authorization: "{{ mikrotik_api_auth_header }}"
+        body:
+          channel: "{{ mikrotik_update_chanel }}"
+        body_format: json
+        validate_certs: false 
+      register: set_channel
+      changed_when: false # 
+
+    - debug:
+        var: set_channel.json
+
+    - name: Odświeżenie informacji o dostępnych aktualizacjach RouterOS
       ansible.builtin.uri:
         url: "https://{{ inventory_hostname }}/rest/system/package/update/check-for-updates"
         method: POST
@@ -17,34 +35,47 @@
           Authorization: "{{ mikrotik_api_auth_header }}"
         body:
           without-paging: ""
+        body_format: check_for_updates
+        validate_certs: false 
+      changed_when: false 
+
+    - debug:
+        var: check_for_updates.json
+
+    - name: Pobranie statusu bieżącej instalacji
+      ansible.builtin.uri:
+        url: "https://{{ inventory_hostname }}/rest/system/package/update"
+        method: GET
+        headers:
+          ContentPOST-Type: 'application/json'
+          Authorization: "{{ mikrotik_api_auth_header }}"
         body_format: json
         validate_certs: false 
-      register: update_check_result
+      register: get_status
       changed_when: false # 
 
-    - name: Wyświetl wynik sprawdzania aktualizacji
-      ansible.builtin.debug:
-        var: update_check_result.json
+    - debug:
+        var: getsStatus.json
 
     # --- ZADANIE 2: Pobranie i instalacja aktualizacji ---
     # To zadanie inicjuje proces pobierania i instalacji nowej wersji RouterOS.
-    - name: Pobierz i zainstaluj aktualizacje
-      ansible.builtin.uri:
-        url: "https://{{ inventory_hostname }}/rest/system/package/update/download"
-        method: POST
-        headers:
-          Content-Type: 'application/json'
-          Authorization: "{{ mikrotik_api_auth_header }}"
-        validate_certs: false
-      register: install_result
-      # Warunek: uruchom to zadanie tylko, jeśli poprzednie zadanie znalazło nową wersję.
-      # Klucz 'version' zazwyczaj pojawia się w odpowiedzi, gdy jest dostępna aktualizacja.
-      #when: update_check_result.json and 'version' in (update_check_result.json | first | default({}))
+    # - name: Pobierz aktualizacje
+    #   ansible.builtin.uri:
+    #     url: "https://{{ inventory_hostname }}/rest/system/package/update/download"
+    #     method: POST
+    #     headers:
+    #       Content-Type: 'application/json'
+    #       Authorization: "{{ mikrotik_api_auth_header }}"
+    #     validate_certs: false
+    #   register: install_result
+    #   # Warunek: uruchom to zadanie tylko, jeśli poprzednie zadanie znalazło nową wersję.
+    #   # Klucz 'version' zazwyczaj pojawia się w odpowiedzi, gdy jest dostępna aktualizacja.
+    #   #when: update_check_result.json and 'version' in (update_check_result.json | first | default({}))
 
-    - name: Wyświetl wynik instalacji
-      ansible.builtin.debug:
-        var: install_result.json
-      when: install_result.changed
+    # - name: Wyświetl wynik instalacji
+    #   ansible.builtin.debug:
+    #     var: install_result.json
+    #   when: install_result.changed
 
     # # --- ZADANIE 3: Restart urządzenia (opcjonalnie, ale zalecane) ---
     # # Po aktualizacji RouterOS wymagany jest restart.
