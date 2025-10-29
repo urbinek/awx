@@ -35,6 +35,7 @@
           Authorization: "{{ mikrotik_api_auth_header }}"
         body:
           without-paging: ""
+        body_format: json
         body_format: check_for_updates
         validate_certs: false 
       changed_when: false 
