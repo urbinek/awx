@@ -45,7 +45,6 @@
     - name: Pauza na pobranie informacji o aktualizacjach
       ansible.builtin.pause:
         minutes: 1
-      when: install_result.changed
 
     - name: Pobranie statusu bieżącej instalacji
       ansible.builtin.uri:
