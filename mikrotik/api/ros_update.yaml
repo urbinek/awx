@@ -22,6 +22,7 @@
         body_format: json
         timeout: 60
         validate_certs: false
+      retries: 3
       register: set_channel
       changed_when: false
 
@@ -37,6 +38,7 @@
         body_format: json
         timeout: 60
         validate_certs: false
+      retries: 3
       register: check_for_updates
       changed_when: false
 
@@ -50,6 +52,7 @@
         body_format: json
         timeout: 60
         validate_certs: false
+      retries: 3
       register: get_status
       changed_when: false
 
@@ -66,6 +69,7 @@
           Authorization: "{{ mikrotik_api_auth_header }}"
         timeout: 60
         validate_certs: false
+      retries: 3
       register: install_result
       when: get_status.json.status == "New version is available"
 
@@ -84,6 +88,7 @@
           Authorization: "{{ mikrotik_api_auth_header }}"
         timeout: 60
         validate_certs: false
+      retries: 3
       when: install_result.changed
       async: 45
       poll: 0   # "Fire and forget" - odpal i nie sprawdzaj statusu
