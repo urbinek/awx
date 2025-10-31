@@ -42,6 +42,11 @@
       register: check_for_updates
       changed_when: false
 
+    - name: Pauza na pobranie informacji o aktualizacjach
+      ansible.builtin.pause:
+        minutes: 1
+      when: install_result.changed
+
     - name: Pobranie statusu bieżącej instalacji
       ansible.builtin.uri:
         url: "https://{{ inventory_hostname }}/rest/system/package/update"
