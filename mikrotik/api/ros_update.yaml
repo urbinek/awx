@@ -1,6 +1,7 @@
 ---
 - name: Aktualizacja MikroTik RouterOS przez API
   hosts: all
+  order: reverse_sorted
   connection: local
   gather_facts: false
 
@@ -14,17 +15,14 @@
         url: "https://{{ inventory_hostname }}/rest/system/package/update/set"
         method: POST
         headers:
-          ContentPOST-Type: 'application/json'
+          Content-Type: 'application/json'
           Authorization: "{{ mikrotik_api_auth_header }}"
         body:
           channel: "{{ mikrotik_update_chanel }}"
         body_format: json
-        validate_certs: false 
+        validate_certs: false
       register: set_channel
-      changed_when: false # 
-
-    - debug:
-        var: set_channel.json
+      changed_when: false
 
     - name: Odświeżenie informacji o dostępnych aktualizacjach RouterOS
       ansible.builtin.uri:
@@ -36,56 +34,62 @@
         body:
           without-paging: ""
         body_format: json
-        validate_certs: false 
+        validate_certs: false
       register: check_for_updates
-      changed_when: false 
-
-    - debug:
-        var: check_for_updates.json
+      changed_when: false
 
     - name: Pobranie statusu bieżącej instalacji
       ansible.builtin.uri:
         url: "https://{{ inventory_hostname }}/rest/system/package/update"
         method: GET
         headers:
-          ContentPOST-Type: 'application/json'
+          Content-Type: 'application/json'
           Authorization: "{{ mikrotik_api_auth_header }}"
         body_format: json
-        validate_certs: false 
+        validate_certs: false
       register: get_status
-      changed_when: false # 
+      changed_when: false
 
-    - debug:
-        var: get_status.json
+    - name: Wyświetl status aktualizacji
+      ansible.builtin.debug:
+        msg: "Host {{ inventory_hostname }} - Status: {{ get_status.json.status }}"
 
-    # --- ZADANIE 2: Pobranie i instalacja aktualizacji ---
-    # To zadanie inicjuje proces pobierania i instalacji nowej wersji RouterOS.
-    # - name: Pobierz aktualizacje
-    #   ansible.builtin.uri:
-    #     url: "https://{{ inventory_hostname }}/rest/system/package/update/download"
-    #     method: POST
-    #     headers:
-    #       Content-Type: 'application/json'
-    #       Authorization: "{{ mikrotik_api_auth_header }}"
-    #     validate_certs: false
-    #   register: install_result
-    #   # Warunek: uruchom to zadanie tylko, jeśli poprzednie zadanie znalazło nową wersję.
-    #   # Klucz 'version' zazwyczaj pojawia się w odpowiedzi, gdy jest dostępna aktualizacja.
-    #   #when: update_check_result.json and 'version' in (update_check_result.json | first | default({}))
+    - name: Pobierz aktualizacje, jeśli są dostępne
+      ansible.builtin.uri:
+        url: "https://{{ inventory_hostname }}/rest/system/package/update/download"
+        method: POST
+        headers:
+          Content-Type: 'application/json'
+          Authorization: "{{ mikrotik_api_auth_header }}"
+        validate_certs: false
+      register: install_result
+      when: get_status.json.status == "New version is available"
 
-    # - name: Wyświetl wynik instalacji
-    #   ansible.builtin.debug:
-    #     var: install_result.json
-    #   when: install_result.changed
+    - name: Pauza na pobranie plików aktualizacji
+      ansible.builtin.pause:
+        minutes: 1
+      when: install_result.changed
 
-    # # --- ZADANIE 3: Restart urządzenia (opcjonalnie, ale zalecane) ---
-    # # Po aktualizacji RouterOS wymagany jest restart.
-    # - name: 3. Zrestartuj urządzenie, aby zakończyć aktualizację
-    #   ansible.builtin.uri:
-    #     url: "https://{{ inventory_hostname }}/rest/system/reboot"
-    #     method: POST
-    #     headers:
-    #       Content-Type: 'application/json'
-    #       Authorization: "{{ mikrotik_api_auth_header }}"
-    #     validate_certs: false
-    #   when: install_result.changed # Uruchom tylko, jeśli instalacja się odbyła
+    # --- ZADANIE 3: Restart urządzenia ---
+    - name: Zrestartuj urządzenie, aby zakończyć aktualizację
+      ansible.builtin.uri:
+        url: "https://{{ inventory_hostname }}/rest/system/reboot"
+        method: POST
+        headers:
+          Content-Type: 'application/json'
+          Authorization: "{{ mikrotik_api_auth_header }}"
+        validate_certs: false
+      when: install_result.changed
+      async: 45
+      poll: 0   # "Fire and forget" - odpal i nie sprawdzaj statusu
+      register: reboot_triggered
+
+    - name: Oczekiwanie na ponowne uruchomienie hosta (port API)
+      ansible.builtin.wait_for:
+        host: "{{ inventory_hostname }}"
+        port: 443
+        state: started
+        delay: 30
+        timeout: 300
+      when: reboot_triggered.changed
+      delegate_to: localhost
