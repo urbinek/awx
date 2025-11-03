@@ -22,7 +22,7 @@
         body_format: json
         timeout: 60
         validate_certs: false
-      retries: 3
+        retries: 3
       register: set_channel
       changed_when: false
 
@@ -38,15 +38,11 @@
         body_format: json
         timeout: 60
         validate_certs: false
-      retries: 3
+        retries: 3
       register: check_for_updates
       changed_when: false
 
-    - name: Pauza na pobranie informacji o aktualizacjach
-      ansible.builtin.pause:
-        minutes: 1
-
-    - name: Pobranie statusu bieżącej instalacji
+    - name: Pobranie statusu (oczekiwanie na odpowiedź serwera)
       ansible.builtin.uri:
         url: "https://{{ inventory_hostname }}/rest/system/package/update"
         method: GET
@@ -56,9 +52,14 @@
         body_format: json
         timeout: 60
         validate_certs: false
-      retries: 3
       register: get_status
       changed_when: false
+      retries: 10          # Ilość prób
+      delay: 15            # Czekaj 15 sekund między próbami
+      until: >             # Pętlaj dopóki warunek nie jest spełniony:
+        get_status.status == 200 and
+        get_status.json.status is defined and
+        get_status.json.status != "finding out latest version..."
 
     - name: Wyświetl status aktualizacji
       ansible.builtin.debug:
@@ -73,16 +74,16 @@
           Authorization: "{{ mikrotik_api_auth_header }}"
         timeout: 60
         validate_certs: false
-      retries: 3
+        retries: 3
       register: install_result
       when: get_status.json.status == "New version is available"
+      changed_when: true  # Wymuś status 'changed' po uruchomieniu
 
     - name: Pauza na pobranie plików aktualizacji
       ansible.builtin.pause:
         minutes: 1
       when: install_result.changed
 
-    # --- ZADANIE 3: Restart urządzenia ---
     - name: Zrestartuj urządzenie, aby zakończyć aktualizację
       ansible.builtin.uri:
         url: "https://{{ inventory_hostname }}/rest/system/reboot"
@@ -92,10 +93,10 @@
           Authorization: "{{ mikrotik_api_auth_header }}"
         timeout: 60
         validate_certs: false
-      retries: 3
+        retries: 3
       when: install_result.changed
       async: 45
-      poll: 0   # "Fire and forget" - odpal i nie sprawdzaj statusu
+      poll: 0   # "Fire and forget"
       register: reboot_triggered
 
     - name: Oczekiwanie na ponowne uruchomienie hosta (port API)
