@@ -1,7 +1,7 @@
 ---
 - name: Aktualizacja MikroTik RouterOS przez API
   hosts: all
-  order: reverse_sorted
+  order: reverse_sorted  # Tak jak ustawiłeś
   connection: local
   gather_facts: false
 
@@ -42,6 +42,7 @@
       register: check_for_updates
       changed_when: false
 
+    # --- POPRAWKA 1: Użycie pętli zamiast statycznej pauzy ---
     - name: Pobranie statusu (oczekiwanie na odpowiedź serwera)
       ansible.builtin.uri:
         url: "https://{{ inventory_hostname }}/rest/system/package/update"
@@ -65,6 +66,7 @@
       ansible.builtin.debug:
         msg: "Host {{ inventory_hostname }} - Status: {{ get_status.json.status }}"
 
+    # --- POPRAWKA 2: Dodanie changed_when: true ---
     - name: Pobierz aktualizacje, jeśli są dostępne
       ansible.builtin.uri:
         url: "https://{{ inventory_hostname }}/rest/system/package/update/download"
@@ -82,8 +84,9 @@
     - name: Pauza na pobranie plików aktualizacji
       ansible.builtin.pause:
         minutes: 1
-      when: install_result.changed
+      when: install_result.changed # Ten warunek zadziała poprawnie
 
+    # --- ZADANIE 3: Restart urządzenia ---
     - name: Zrestartuj urządzenie, aby zakończyć aktualizację
       ansible.builtin.uri:
         url: "https://{{ inventory_hostname }}/rest/system/reboot"
@@ -94,7 +97,7 @@
         timeout: 60
         validate_certs: false
         retries: 3
-      when: install_result.changed
+      when: install_result.changed # Ten warunek zadziała poprawnie
       async: 45
       poll: 0   # "Fire and forget"
       register: reboot_triggered
@@ -106,5 +109,5 @@
         state: started
         delay: 30
         timeout: 300
-      when: reboot_triggered.changed
+      when: reboot_triggered.changed # Ten warunek zadziała poprawnie
       delegate_to: localhost
