@@ -1,5 +1,5 @@
 ---
-- name: Aktualizacja MikroTik RouterOS przez API
+- name: "Aktualizacja MikroTik RouterOS przez API"
   hosts: all
   connection: local
   gather_facts: false
@@ -15,7 +15,7 @@
       User-Agent: "curl/7.81.0"
 
   tasks:
-    - name: Sprawdzenie dostępności hosta (Port 443)
+    - name: "0. Sprawdzenie dostępności hosta (Port 443)"
       ansible.builtin.wait_for:
         host: "{{ inventory_hostname }}"
         port: 443
@@ -25,13 +25,13 @@
       register: port_check
       ignore_errors: true
 
-    - name: Ustawienie flagi dostępności
+    - name: "Ustawienie flagi dostępności"
       ansible.builtin.set_fact:
         host_is_up: "{{ not port_check.failed | default(false) }}"
 
-    - name: PROCES AKTUALIZACJI
+    - name: "PROCES AKTUALIZACJI"
       block:
-        - name: Ustawienie kanału aktualizacji na '{{ mikrotik_update_channel }}'
+        - name: "1. Ustawienie kanału aktualizacji na '{{ mikrotik_update_channel }}'"
           ansible.builtin.uri:
             url: "https://{{ inventory_hostname }}/rest/system/package/update/set"
             method: POST
@@ -41,11 +41,11 @@
             validate_certs: false
           register: set_channel_res
 
-        - name: DEBUG - Response: Set Channel
+        - name: "DEBUG - Response: Set Channel"
           ansible.builtin.debug:
             var: set_channel_res.json
 
-        - name: Odświeżenie informacji o aktualizacjach
+        - name: "2. Odświeżenie informacji o aktualizacjach"
           ansible.builtin.uri:
             url: "https://{{ inventory_hostname }}/rest/system/package/update/check-for-updates"
             method: POST
@@ -55,11 +55,11 @@
             validate_certs: false
           register: check_updates_res
 
-        - name: DEBUG - Response: Check Updates
+        - name: "DEBUG - Response: Check Updates"
           ansible.builtin.debug:
             var: check_updates_res.json
 
-        - name: Sprawdzenie statusu przed pobieraniem
+        - name: "3. Sprawdzenie statusu przed pobieraniem"
           ansible.builtin.uri:
             url: "https://{{ inventory_hostname }}/rest/system/package/update"
             method: GET
@@ -67,15 +67,15 @@
             validate_certs: false
           register: initial_status
 
-        - name: DEBUG - Response: Initial Status
+        - name: "DEBUG - Response: Initial Status"
           ansible.builtin.debug:
             var: initial_status.json
 
-        - name: ZAKOŃCZ JEŚLI AKTUALNY
+        - name: "ZAKOŃCZ JEŚLI AKTUALNY"
           ansible.builtin.meta: end_host
           when: "initial_status.json.status is defined and 'already up to date' in initial_status.json.status"
 
-        - name: Pobieranie najnowszej wersji
+        - name: "4. Pobieranie najnowszej wersji"
           ansible.builtin.uri:
             url: "https://{{ inventory_hostname }}/rest/system/package/update/download"
             method: POST
@@ -84,11 +84,11 @@
             validate_certs: false
           register: download_res
 
-        - name: DEBUG - Response: Download
+        - name: "DEBUG - Response: Download"
           ansible.builtin.debug:
             var: download_res.json
 
-        - name: "Pętla: Oczekiwanie na gotowość do restartu (max 3 próby)"
+        - name: "5. Pętla: Oczekiwanie na gotowość do restartu (max 3 próby)"
           ansible.builtin.uri:
             url: "https://{{ inventory_hostname }}/rest/system/package/update"
             method: GET
@@ -99,11 +99,11 @@
           delay: 5
           until: "wait_ready.json.status is defined and 'reboot' in wait_ready.json.status"
 
-        - name: DEBUG - Response: Final Wait Status
+        - name: "DEBUG - Response: Final Wait Status"
           ansible.builtin.debug:
             var: wait_ready.json
 
-        - name: Wykonanie restartu
+        - name: "6. Wykonanie restartu"
           ansible.builtin.uri:
             url: "https://{{ inventory_hostname }}/rest/system/reboot"
             method: POST
@@ -112,7 +112,7 @@
           register: reboot_res
           when: "wait_ready.json.status is defined and 'reboot' in wait_ready.json.status"
 
-        - name: "Pętla: Oczekiwanie na uruchomienie i weryfikacja wersji (max 10 prób)"
+        - name: "7. Pętla: Oczekiwanie na uruchomienie i weryfikacja wersji (max 10 prób)"
           ansible.builtin.uri:
             url: "https://{{ inventory_hostname }}/rest/system/package/update"
             method: GET
@@ -124,7 +124,7 @@
           until: "post_reboot_status.status == 200 and 'already up to date' in (post_reboot_status.json.status | default(''))"
           when: reboot_res is changed
 
-        - name: DEBUG - Response: Post-Reboot Status
+        - name: "DEBUG - Response: Post-Reboot Status"
           ansible.builtin.debug:
             var: post_reboot_status.json
           when: reboot_res is changed
