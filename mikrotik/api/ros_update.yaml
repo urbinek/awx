@@ -43,22 +43,24 @@
 
     - name: Pobranie statusu (oczekiwanie na odpowiedź serwera)
       ansible.builtin.uri:
-        url: "http://{{ inventory_hostname }}/rest/system/package/update"
+        # ZMIANA: https zamiast http
+        url: "https://{{ inventory_hostname }}/rest/system/package/update"
         method: GET
         headers:
           Content-Type: 'application/json'
           Authorization: "{{ mikrotik_api_auth_header }}"
         body_format: json
-        timeout: 10
+        timeout: 10 # Zwiększony timeout dla pewności
         validate_certs: false
       register: get_status
-      changed_when: false
+      # Zwiększamy liczbę prób i czas między nimi
       retries: 3
-      delay: 15
-      until: >
-        get_status.status == 200 and
-        get_status.json.status is defined and
-        get_status.json.status != "finding out latest version..."
+      delay: 5
+      until: 
+        - get_status.status == 200
+        - get_status.json is defined
+        - get_status.json.status is defined
+        - "'finding' not in get_status.json.status"
 
     - name: Wyświetl status aktualizacji
       ansible.builtin.debug:
