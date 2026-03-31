@@ -23,28 +23,20 @@
         connect_timeout: 3
         timeout: 10
       register: port_check
-      [cite_start]ignore_errors: true [cite: 103]
+      ignore_errors: true
 
     - name: Ustawienie flagi dostępności
       ansible.builtin.set_fact:
-        [cite_start]host_is_up: "{{ not port_check.failed | default(false) }}" [cite: 47]
+        host_is_up: "{{ not port_check.failed | default(false) }}"
 
-    - name: 1. Pobranie informacji o wersji (zawsze, jeśli host żyje)
+    - name: 1. Pobranie informacji o wersji
       ansible.builtin.uri:
         url: "https://{{ inventory_hostname }}/rest/system/package/update"
         method: GET
         headers: "{{ common_headers }}"
         validate_certs: false
       register: current_status
-      [cite_start]when: host_is_up [cite: 104]
-
-    - name: LOG - Stan urządzenia
-      ansible.builtin.debug:
-        msg: 
-          - "Host: {{ inventory_hostname }}"
-          - "Wersja: {{ current_status.json['installed-version'] | default('N/A') }}"
-          - "Status: {{ current_status.json.status | default('N/A') }}"
-      [cite_start]when: host_is_up and current_status.json is defined [cite: 48]
+      when: host_is_up | bool
 
     - name: PROCES AKTUALIZACJI
       block:
@@ -55,7 +47,7 @@
             headers: "{{ common_headers | combine({'Content-Type': 'application/json'}) }}"
             body: { "without-paging": "" }
             body_format: json
-            [cite_start]validate_certs: false [cite: 49, 98]
+            validate_certs: false
 
         - name: 3. Pobieranie plików
           ansible.builtin.uri:
@@ -65,7 +57,7 @@
             timeout: 120
             validate_certs: false
           register: download_trigger
-          [cite_start]when: current_status.json.status == "New version is available" [cite: 99, 106]
+          when: current_status.json.status == "New version is available"
 
         - name: 4. Weryfikacja gotowości do restartu
           ansible.builtin.uri:
@@ -76,7 +68,9 @@
           register: final_check
           retries: 10
           delay: 5
-          [cite_start]until: "final_check.json.status is search('reboot') or final_check.json.status is search('up to date')" [cite: 92, 106]
+          until: 
+            - final_check.json.status is defined
+            - "final_check.json.status is search('reboot') or final_check.json.status is search('up to date')"
 
         - name: 5. Restart urządzenia
           ansible.builtin.uri:
@@ -87,7 +81,7 @@
           register: reboot_res
           async: 10
           poll: 0
-          [cite_start]when: final_check.json.status is search('reboot') [cite: 58, 65, 86]
+          when: "final_check.json.status is search('reboot')"
 
         - name: 6. Oczekiwanie na powrót po aktualizacji
           ansible.builtin.wait_for:
@@ -97,9 +91,9 @@
             delay: 60
             timeout: 450
           when: reboot_res is changed
-          [cite_start]delegate_to: localhost [cite: 101, 108]
+          delegate_to: localhost
 
       when: 
-        - host_is_up
+        - host_is_up | bool
         - current_status.json is defined
-        - [cite_start]current_status.json.status != "System is already up to date" [cite: 90, 93, 112]
+        - current_status.json.status != "System is already up to date"
