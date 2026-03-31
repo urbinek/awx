@@ -13,7 +13,7 @@
   tasks:
     - name: Ustawienie kanału aktualizacji na '{{ mikrotik_update_chanel }}'
       ansible.builtin.uri:
-        url: "https://{{ inventory_hostname }}/rest/system/package/update/set"
+        url: "http://{{ inventory_hostname }}/rest/system/package/update/set"
         method: POST
         headers:
           Content-Type: 'application/json'
@@ -28,7 +28,7 @@
 
     - name: Odświeżenie informacji o dostępnych aktualizacjach RouterOS
       ansible.builtin.uri:
-        url: "https://{{ inventory_hostname }}/rest/system/package/update/check-for-updates"
+        url: "http://{{ inventory_hostname }}/rest/system/package/update/check-for-updates"
         method: POST
         headers:
           Content-Type: 'application/json'
@@ -43,7 +43,7 @@
 
     - name: Pobranie statusu (oczekiwanie na odpowiedź serwera)
       ansible.builtin.uri:
-        url: "https://{{ inventory_hostname }}/rest/system/package/update"
+        url: "http://{{ inventory_hostname }}/rest/system/package/update"
         method: GET
         headers:
           Content-Type: 'application/json'
@@ -66,7 +66,7 @@
 
     - name: Pobierz aktualizacje, jeśli są dostępne
       ansible.builtin.uri:
-        url: "https://{{ inventory_hostname }}/rest/system/package/update/download"
+        url: "http://{{ inventory_hostname }}/rest/system/package/update/download"
         method: POST
         headers:
           Content-Type: 'application/json'
@@ -79,7 +79,7 @@
 
     - name: Zrestartuj urządzenie, aby zakończyć aktualizację
       ansible.builtin.uri:
-        url: "https://{{ inventory_hostname }}/rest/system/reboot"
+        url: "http://{{ inventory_hostname }}/rest/system/reboot"
         method: POST
         headers:
           Content-Type: 'application/json'
