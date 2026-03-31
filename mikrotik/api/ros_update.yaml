@@ -49,25 +49,26 @@
             body_format: json
             validate_certs: false
 
-        - name: 3. Pobieranie plików
+        - name: 3. Pobieranie plików (jeśli dostępna nowa wersja)
           ansible.builtin.uri:
             url: "https://{{ inventory_hostname }}/rest/system/package/update/download"
             method: POST
             headers: "{{ common_headers }}"
-            timeout: 120
+            timeout: 150 # Zwiększony czas na pobieranie
             validate_certs: false
           register: download_trigger
-          when: current_status.json.status == "New version is available"
+          # Pobieramy, jeśli status to "New version..." LUB gdy pakiety nie są jeszcze "Downloaded"
+          when: "current_status.json.status == 'New version is available'"
 
-        - name: 4. Weryfikacja gotowości do restartu
+        - name: 4. Oczekiwanie na gotowość plików do instalacji
           ansible.builtin.uri:
             url: "https://{{ inventory_hostname }}/rest/system/package/update"
             method: GET
             headers: "{{ common_headers }}"
             validate_certs: false
           register: final_check
-          retries: 10
-          delay: 5
+          retries: 15
+          delay: 10 # Dłuższe przerwy dają MikroTikowi czas na zapisanie plików
           until: 
             - final_check.json.status is defined
             - "final_check.json.status is search('reboot') or final_check.json.status is search('up to date')"
@@ -81,9 +82,12 @@
           register: reboot_res
           async: 10
           poll: 0
-          when: "final_check.json.status is search('reboot')"
+          # Restartujemy, jeśli system o to prosi LUB jeśli właśnie skończyliśmy pobieranie (download_trigger)
+          when: >
+            (final_check.json.status is search('reboot')) or 
+            (current_status.json.status is search('reboot'))
 
-        - name: 6. Oczekiwanie na powrót po aktualizacji
+        - name: 6. Oczekiwanie na powrót urządzenia po reboocie
           ansible.builtin.wait_for:
             host: "{{ inventory_hostname }}"
             port: 443
