@@ -88,7 +88,7 @@
           ansible.builtin.debug:
             var: download_res.json
 
-        - name: Pętla: Oczekiwanie na gotowość do restartu (max 3 próby)
+        - name: "Pętla: Oczekiwanie na gotowość do restartu (max 3 próby)"
           ansible.builtin.uri:
             url: "https://{{ inventory_hostname }}/rest/system/package/update"
             method: GET
@@ -110,9 +110,9 @@
             headers: "{{ common_headers }}"
             validate_certs: false
           register: reboot_res
-          when: "'reboot' in wait_ready.json.status"
+          when: "wait_ready.json.status is defined and 'reboot' in wait_ready.json.status"
 
-        - name: Pętla: Oczekiwanie na uruchomienie i weryfikacja wersji (max 10 prób)
+        - name: "Pętla: Oczekiwanie na uruchomienie i weryfikacja wersji (max 10 prób)"
           ansible.builtin.uri:
             url: "https://{{ inventory_hostname }}/rest/system/package/update"
             method: GET
