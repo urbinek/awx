@@ -1,101 +1,113 @@
 ---
 - name: Aktualizacja MikroTik RouterOS przez API
   hosts: all
-  order: reverse_sorted
-  serial: 1
-  connection: local  # Wykonywane na workerze, nie na routerze
+  connection: local
   gather_facts: false
+  serial: 1  # Aktualizacja maszyna po maszynie dla bezpieczeństwa
 
   vars:
+    # Dane logowania i kanał (najlepiej trzymać w ansible-vault lub env)
     mikrotik_api_auth_header: "Basic {{ ( mikrotik_user + ':' + mikrotik_password ) | b64encode }}"
-    mikrotik_update_chanel: stable
+    mikrotik_update_channel: stable
+    
+    # Wspólne nagłówki udające curla, by uniknąć problemów z bibliotekami Pythona
+    common_headers:
+      Authorization: "{{ mikrotik_api_auth_header }}"
+      Accept-Encoding: "identity"
+      Connection: "close"
+      User-Agent: "curl/7.81.0"
 
   tasks:
-    - name: Ustawienie kanału aktualizacji
-      ansible.builtin.uri:
-        url: "https://{{ inventory_hostname }}/rest/system/package/update/set"
-        method: POST
-        headers:
-          Authorization: "{{ mikrotik_api_auth_header }}"
-          Content-Type: 'application/json'
-          User-Agent: "curl/7.81.0"
-        body:
-          channel: "{{ mikrotik_update_chanel }}"
-        body_format: json
-        timeout: 15
-        validate_certs: false
-      register: set_channel
-
-    - name: Odświeżenie informacji o aktualizacjach
-      ansible.builtin.uri:
-        url: "https://{{ inventory_hostname }}/rest/system/package/update/check-for-updates"
-        method: POST
-        headers:
-          Authorization: "{{ mikrotik_api_auth_header }}"
-          Content-Type: 'application/json'
-          User-Agent: "curl/7.81.0"
-        body:
-          without-paging: ""
-        body_format: json
-        timeout: 15
-        validate_certs: false
-      register: check_for_updates
-
-    - name: Pobranie statusu (oczekiwanie na odpowiedź serwera)
-      ansible.builtin.uri:
-        url: "https://{{ inventory_hostname }}/rest/system/package/update"
-        method: GET
-        headers:
-          Authorization: "{{ mikrotik_api_auth_header }}"
-          Accept-Encoding: "identity"
-          User-Agent: "curl/7.81.0"
-        timeout: 15
-        validate_certs: false
-      register: get_status
-      failed_when: false
-      retries: 10
-      delay: 5
-      until: 
-        - get_status.status == 200
-        - get_status.json is defined
-        - "'finding' not in (get_status.json.status | default(''))"
-
-    - name: Pobierz aktualizacje
-      ansible.builtin.uri:
-        url: "https://{{ inventory_hostname }}/rest/system/package/update/download"
-        method: POST
-        headers:
-          Authorization: "{{ mikrotik_api_auth_header }}"
-          User-Agent: "curl/7.81.0"
-        timeout: 60  # Zwiększony timeout na pobieranie plików przez router
-        validate_certs: false
-      register: install_result
-      # Pobieramy tylko gdy status to "New version is available"
-      when: get_status.json.status is defined and get_status.json.status == "New version is available"
-
-    - name: Zrestartuj urządzenie
-      ansible.builtin.uri:
-        url: "https://{{ inventory_hostname }}/rest/system/reboot"
-        method: POST
-        headers:
-          Authorization: "{{ mikrotik_api_auth_header }}"
-          User-Agent: "curl/7.81.0"
-        timeout: 15
-        validate_certs: false
-      # Restartujemy jeśli pobrano pakiety TERAZ lub pakiety już czekają (Downloaded)
-      when: >
-        (install_result is changed) or 
-        (get_status.json.status | default('') == "Downloaded, please reboot router to upgrade it")
-      async: 20
-      poll: 0
-      register: reboot_triggered
-
-    - name: Oczekiwanie na ponowne uruchomienie (port 80)
+    - name: KROK 0 - Sprawdzenie dostępności hosta (Port 80)
       ansible.builtin.wait_for:
         host: "{{ inventory_hostname }}"
         port: 80
         state: started
-        delay: 30
-        timeout: 300
-      when: reboot_triggered is changed
-      delegate_to: localhost
+        connect_timeout: 3
+        timeout: 5
+      register: port_check
+      ignore_errors: true
+
+    - name: Ustawienie flagi dostępności
+      ansible.builtin.set_fact:
+        host_is_up: "{{ not port_check.failed | default(false) }}"
+
+    # Sekcja zadań wykonywana TYLKO dla dostępnych hostów
+    - name: PROCES AKTUALIZACJI
+      block:
+        - name: 1. Ustawienie kanału aktualizacji na '{{ mikrotik_update_channel }}'
+          ansible.builtin.uri:
+            url: "http://{{ inventory_hostname }}/rest/system/package/update/set"
+            method: POST
+            headers: "{{ common_headers | combine({'Content-Type': 'application/json'}) }}"
+            body:
+              channel: "{{ mikrotik_update_channel }}"
+            body_format: json
+            timeout: 15
+            validate_certs: false
+          register: set_channel
+
+        - name: 2. Odświeżenie informacji o aktualizacjach
+          ansible.builtin.uri:
+            url: "http://{{ inventory_hostname }}/rest/system/package/update/check-for-updates"
+            method: POST
+            headers: "{{ common_headers | combine({'Content-Type': 'application/json'}) }}"
+            body:
+              without-paging: ""
+            body_format: json
+            timeout: 20
+            validate_certs: false
+          register: check_for_updates
+
+        - name: 3. Oczekiwanie na status z serwera MikroTik (pętla)
+          ansible.builtin.uri:
+            url: "http://{{ inventory_hostname }}/rest/system/package/update"
+            method: GET
+            headers: "{{ common_headers }}"
+            timeout: 15
+            validate_certs: false
+          register: get_status
+          failed_when: false
+          retries: 10
+          delay: 5
+          until: 
+            - get_status.status == 200
+            - get_status.json is defined
+            - "'finding' not in (get_status.json.status | default(''))"
+
+        - name: 4. Pobierz aktualizacje (jeśli dostępna nowa wersja)
+          ansible.builtin.uri:
+            url: "http://{{ inventory_hostname }}/rest/system/package/update/download"
+            method: POST
+            headers: "{{ common_headers }}"
+            timeout: 90  # Bardzo ważny wysoki timeout dla pobierania plików
+            validate_certs: false
+          register: install_result
+          when: get_status.json.status == "New version is available"
+
+        - name: 5. Zrestartuj urządzenie (jeśli pakiety czekają)
+          ansible.builtin.uri:
+            url: "http://{{ inventory_hostname }}/rest/system/reboot"
+            method: POST
+            headers: "{{ common_headers }}"
+            timeout: 15
+            validate_certs: false
+          # Restartujemy jeśli pobraliśmy pakiety TERAZ lub pakiety już tam były (Downloaded)
+          when: >
+            (install_result is changed) or 
+            (get_status.json.status | default('') == "Downloaded, please reboot router to upgrade it")
+          async: 20
+          poll: 0
+          register: reboot_triggered
+
+        - name: 6. Oczekiwanie na powrót urządzenia po reboocie
+          ansible.builtin.wait_for:
+            host: "{{ inventory_hostname }}"
+            port: 80
+            state: started
+            delay: 45
+            timeout: 400
+          when: reboot_triggered is changed
+          delegate_to: localhost
+
+      when: host_is_up  # Cały blok zostanie pominięty, jeśli host_is_up == false
