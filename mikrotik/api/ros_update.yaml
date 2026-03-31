@@ -21,7 +21,7 @@
         port: 443
         state: started
         connect_timeout: 3
-        timeout: 5
+        timeout: 10
       register: port_check
       ignore_errors: true
 
@@ -31,7 +31,7 @@
 
     - name: PROCES AKTUALIZACJI
       block:
-        - name: 1. Pobranie informacji o obecnej wersji i statusie
+        - name: 1. Pobranie informacji o wersji
           ansible.builtin.uri:
             url: "https://{{ inventory_hostname }}/rest/system/package/update"
             method: GET
@@ -39,27 +39,11 @@
             validate_certs: false
           register: current_status
 
-        - name: LOG - Stan początkowy urządzenia
+        - name: LOG - Wersja przed operacją
           ansible.builtin.debug:
-            msg: 
-              - "Host: {{ inventory_hostname }}"
-              - "Zainstalowana wersja: {{ current_status.json['installed-version'] | default('Brak danych') }}"
-              - "Najnowsza dostępna: {{ current_status.json['latest-version'] | default('Brak danych') }}"
-              - "Status API: {{ current_status.json.status | default('Brak danych') }}"
+            msg: "Host: {{ inventory_hostname }} | Wersja: {{ current_status.json['installed-version'] }} | Status: {{ current_status.json.status }}"
 
-        - name: 2. Wymuszenie kanału '{{ mikrotik_update_channel }}'
-          ansible.builtin.uri:
-            url: "https://{{ inventory_hostname }}/rest/system/package/update/set"
-            method: POST
-            headers: "{{ common_headers | combine({'Content-Type': 'application/json'}) }}"
-            body:
-              channel: "{{ mikrotik_update_channel }}"
-            body_format: json
-            validate_certs: false
-          register: set_channel
-          when: current_status.json.channel | default('') != mikrotik_update_channel
-
-        - name: 3. Sprawdzenie aktualizacji (odświeżenie)
+        - name: 2. Odświeżenie listy aktualizacji
           ansible.builtin.uri:
             url: "https://{{ inventory_hostname }}/rest/system/package/update/check-for-updates"
             method: POST
@@ -67,62 +51,51 @@
             body: { "without-paging": "" }
             body_format: json
             validate_certs: false
-          register: refresh_check
 
-        - name: 4. Oczekiwanie na gotowość statusu (pętla)
-          ansible.builtin.uri:
-            url: "https://{{ inventory_hostname }}/rest/system/package/update"
-            method: GET
-            headers: "{{ common_headers }}"
-            validate_certs: false
-          register: update_info
-          retries: 10
-          delay: 5
-          until: 
-            - update_info.status == 200
-            - "'finding' not in (update_info.json.status | default(''))"
-
-        - name: 5. Pobieranie plików (jeśli wymagane)
+        - name: 3. Pobieranie plików (jeśli nowa wersja jest dostępna)
           ansible.builtin.uri:
             url: "https://{{ inventory_hostname }}/rest/system/package/update/download"
             method: POST
             headers: "{{ common_headers }}"
             timeout: 120
             validate_certs: false
-          register: download_res
-          when: update_info.json.status == "New version is available"
+          register: download_trigger
+          when: current_status.json.status == "New version is available"
 
-        - name: LOG - Status po próbie pobrania
+        - name: 4. Weryfikacja statusu przed restartem (Kluczowe!)
+          ansible.builtin.uri:
+            url: "https://{{ inventory_hostname }}/rest/system/package/update"
+            method: GET
+            headers: "{{ common_headers }}"
+            validate_certs: false
+          register: final_check
+          retries: 5
+          delay: 3
+          until: "final_check.json.status is search('reboot')"
+
+        - name: LOG - Status przed restartem
           ansible.builtin.debug:
-            msg: "Aktualny status po kroku download: {{ update_info.json.status }}"
+            msg: "Urządzenie {{ inventory_hostname }} gotowe do restartu. Status: {{ final_check.json.status }}"
 
-        - name: 6. Restart (jeśli pakiety są gotowe do instalacji)
+        - name: 5. Restart urządzenia
           ansible.builtin.uri:
             url: "https://{{ inventory_hostname }}/rest/system/reboot"
             method: POST
             headers: "{{ common_headers }}"
             validate_certs: false
           register: reboot_res
-          # Restartujemy jeśli: pobraliśmy pakiety przed chwilą LUB już wcześniej tam były
-          when: >
-            (download_res is changed) or 
-            (update_info.json.status == "Downloaded, please reboot router to upgrade it")
           async: 10
           poll: 0
 
-        - name: 7. Oczekiwanie na powrót urządzenia
+        - name: 6. Oczekiwanie na powrót po aktualizacji
           ansible.builtin.wait_for:
             host: "{{ inventory_hostname }}"
             port: 443
             state: started
-            delay: 45
+            delay: 60
             timeout: 400
-          when: reboot_res is changed
           delegate_to: localhost
 
-        - name: LOG - Wynik końcowy
-          ansible.builtin.debug:
-            msg: "Aktualizacja zakończona pomyślnie dla {{ inventory_hostname }}"
-          when: reboot_res is changed
-
-      when: host_is_up
+      when: 
+        - host_is_up
+        - current_status.json.status != "System is already up to date"
